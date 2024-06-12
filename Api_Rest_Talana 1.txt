@@ -1,0 +1,89 @@
+import os
+import requests
+import pandas as pd
+from pathlib import Path
+
+def obtener_ruta_descargas():
+    # Obtiene la ruta de la carpeta "Downloads" del usuario actual en Windows
+    ruta_descargas = os.path.join(Path.home(), 'Downloads')
+    return ruta_descargas
+
+def obtener_token():
+    # URL del endpoint para obtener el token de autenticación
+    token_url = 'https://talana.com/es/api/api-token-auth/'
+
+    # Datos de autenticación (nombre de usuario y contraseña)
+    auth_data = {
+        'username': 'xxxxxxxxxxxxxxxxxxxxx',
+        'password': 'xxxxxxxxxxxxxxxxxxxxx'
+    }
+
+    # Realizar una solicitud POST para obtener el token de autenticación
+    response = requests.post(token_url, json=auth_data)
+
+    # Verificar si la solicitud fue exitosa
+    if response.status_code == 200:
+        # Extraer el token de autenticación del cuerpo de la respuesta
+        token_response = response.json()
+        auth_token = token_response['token']
+        print("Token de autenticación obtenido:", auth_token)
+        return auth_token
+    else:
+        print("Error al obtener el token de autenticación:", response.status_code)
+        return None
+
+def solicitar_datos(url, token):
+    # Encabezado de autorización con el token
+    headers = {
+        'Authorization': f'Token {token}'
+    }
+
+    # Realiza una solicitud GET para obtener los datos
+    response = requests.get(url, headers=headers)
+
+    # Verifica si la solicitud fue exitosa
+    if response.status_code == 200:
+        # Convierte los datos JSON en un DataFrame de pandas
+        data = response.json()
+        df = pd.DataFrame(data)
+
+        # Obtiene la ruta de la carpeta "Downloads"
+        ruta_descargas = obtener_ruta_descargas()
+
+        # Guarda el DataFrame en un archivo Excel en la carpeta "Downloads"
+        nombre_archivo = f'{url.split("/")[-2]}.xlsx'
+        ruta_archivo = os.path.join(ruta_descargas, nombre_archivo)
+        df.to_excel(ruta_archivo, index=False)
+        
+        print(f"Datos guardados exitosamente en {ruta_archivo}")
+    else:
+        print("Error al obtener los datos:", response.status_code)
+
+def main():
+    # Obtener el token de autenticación
+    token = obtener_token()
+    if token:
+        # Opciones de URL
+        opciones_url = {
+            'Persona': 'https://talana.com/es/api/persona/',
+            'Contratos': 'https://talana.com/es/api/contrato/',
+            'Contratos v2': 'https://talana.com/es/api/remuneraciones/contract/'
+        }
+        
+        # Mostrar las opciones al usuario
+        print("Selecciona una opción de URL:")
+        for i, (opcion, url) in enumerate(opciones_url.items(), 1):
+            print(f"{i}. {opcion}")
+
+        # Solicitar la selección al usuario
+        opcion_seleccionada = int(input("Ingresa el número de la opción deseada: "))
+        if opcion_seleccionada in range(1, len(opciones_url) + 1):
+            url = list(opciones_url.values())[opcion_seleccionada - 1]
+            solicitar_datos(url, token)
+        else:
+            print("Opción no válida.")
+    else:
+        print("No se pudo obtener el token de autenticación.")
+
+if __name__ == "__main__":
+    main()
