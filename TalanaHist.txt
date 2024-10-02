@@ -1,0 +1,100 @@
+import pandas as pd
+import requests
+import json
+from azure.storage.blob import BlobServiceClient
+from io import BytesIO
+import os
+from dotenv import load_dotenv
+
+# Cargar datos sensibles desde un archivo .env (o desde Azure Key Vault)
+load_dotenv()
+
+# Cargar variables de entorno
+connection_string = os.getenv("AZURE_CONNECTION_STRING")
+auth_token = os.getenv("AUTH_TOKEN")
+cookie_session = os.getenv("COOKIE_SESSION")
+
+# URLs para obtener datos
+url_list = [
+    "Pon tus URLs aquí con los parámetros correspondientes"
+]
+
+payload = {}
+headers = {
+  'Authorization': f'Bearer {auth_token}',  # Utilizando el token cargado desde .env
+  'Cookie': cookie_session  # Utilizando la cookie de sesión cargada desde .env
+}
+
+# Descargar y combinar los resultados de todas las páginas
+results_combined = []
+for url in url_list:
+    response = requests.request("GET", url, headers=headers, data=payload)
+    results = json.loads(response.text.encode('utf8'))["results"]
+    results_combined.extend(results)
+
+# Función de mapeo
+def mi_funcion(registro):
+    return {
+        "id": registro["id"],
+        "empleado_id": registro['empleado']["id"],
+        "empleado_rut": registro['empleado']["rut"],
+        "empleado_nombre": registro['empleado']["nombre"],
+        "empleado_paterno": registro['empleado']["apellidoPaterno"],
+        "empleado_materno": registro['empleado']["apellidoMaterno"],
+        "empleado_sexo": registro['empleado']["sexo"],
+        "empleado_fecha_nacimiento": registro['empleado']["fechaNacimiento"],
+        "emplead_nacionalidad": registro['empleado']["nacionalidad"],
+        "empleado_email": registro['empleado']["email"],
+        "detalles_empleado_id": registro['empleado']['detalles'][0]["id"],
+        "detalles_empleado_foto": registro['empleado']['detalles'][0]["foto"],
+        "detalles_empleado_mail_personal": registro['empleado']['detalles'][0]["emailPersonal"],
+        "detalles_empleado_telefono": registro['empleado']['detalles'][0]["telefono"],
+        "detalles_empleado_celular": registro['empleado']['detalles'][0]["celular"],
+        "detalles_empleado_direccioncalle": registro['empleado']['detalles'][0]["direccionCalle"],
+        "detalles_empleado_direccionnumero": registro['empleado']['detalles'][0]["direccionNumero"],
+        "detalles_empleado_direccion_dep": registro['empleado']['detalles'][0]["direccionDepartamento"],
+        "detalles_empleado_estado_civil": registro['empleado']['detalles'][0]["estadoCivil"],
+        "detalles_empleado_nivel_educacion": registro['empleado']['detalles'][0]["nivelEducacional"],
+        "detalles_empleado_profesion": registro['empleado']['detalles'][0]["profesion"],
+        "cargo": registro["cargo"],
+        'fechaContratacion': registro["fechaContratacion"],
+        'desde': registro["desde"],
+        'hasta': registro["hasta"],
+        'finiquitado': registro["finiquitado"],
+        'jornada': registro["jornada"]['id'],
+        'jornada_nombre': registro["jornada"]['nombre'],
+        'horas_jornada': registro["horasDeLaJornada"],
+        "CategoriaAcademica": registro['userDefinedFields']['CategoriaAcademica'],
+        "centro_gestion": registro['userDefinedFields']['CentroDeGestion'],
+        "carrera_adscripcion": registro['userDefinedFields']['CarreraDeAdscripcion'],
+        "TipodePlantaAcademica": registro['userDefinedFields']['TipodePlantaAcademica'],
+        'tramoAsignacionPrevisional': registro['tramoAsignacionPrevisional'],
+        'isapre': registro['isapre'],
+        'afp': registro['afp'],
+        'sueldoBase': registro['sueldoBase'],
+        'sueldoFormaPago': registro['sueldoFormaPago'],
+        'sueldoBanco': registro['sueldoBanco'],
+        'sueldoCuentaCorriente': registro['sueldoCuentaCorriente'],
+        'sueldoCuentaCorrienteTipo': registro['sueldoCuentaCorrienteTipo'],
+        'claseSalarial': registro['claseSalarial']
+    }
+
+# Aplicar la función de mapeo
+mapeado = list(map(mi_funcion, results_combined))
+df = pd.DataFrame(mapeado)
+
+# Configurar conexión a Azure Blob Storage
+blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+container_name = "datalake"
+folder_name = "folder"
+file_name = "datos_talana.xlsx"
+
+blob_client = blob_service_client.get_blob_client(container=container_name, blob=f"{folder_name}/{file_name}")
+
+# Guardar DataFrame en Excel y cargarlo en Azure Blob Storage
+with BytesIO() as output:
+    df.to_excel(output, index=False)
+    output.seek(0)
+    blob_client.upload_blob(output, overwrite=True)
+
+print(f"Datos descargados y guardados en el contenedor '{container_name}' en la carpeta '{folder_name}' como '{file_name}'.")
